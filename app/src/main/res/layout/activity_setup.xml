@@ -3,13 +3,13 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:gravity="center"
-    android:padding="24dp">
+    android:padding="24dp"
+    android:gravity="center">
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Привязка ключа"
+        android:text="Настройка fixed_time"
         android:textSize="24sp"
         android:textStyle="bold"
         android:layout_marginBottom="24dp" />
@@ -17,25 +17,27 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Введите секретный ключ с Raspberry Pi (Base32)"
+        android:text="Unix timestamp генерации ключа\n(пример: 1640995200)"
         android:textSize="16sp"
-        android:layout_marginBottom="24dp" />
+        android:layout_marginBottom="24dp"
+        android:gravity="center" />
 
     <com.google.android.material.textfield.TextInputLayout
-        android:id="@+id/tilSecretKey"
+        android:id="@+id/tilFixedTime"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Секретный ключ">
+        android:hint="Fixed time">
 
         <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/etSecretKey"
+            android:id="@+id/etFixedTime"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="textCapCharacters" />
+            android:inputType="number"
+            android:text="1640995200" />
     </com.google.android.material.textfield.TextInputLayout>
 
     <Button
-        android:id="@+id/btnSaveKey"
+        android:id="@+id/btnSave"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Сохранить"

@@ -15,7 +15,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="SmartDoor"
+        android:text="Arduino SmartDoor"
         android:textSize="28sp"
         android:textStyle="bold"
         android:layout_marginBottom="40dp" />
@@ -24,7 +24,7 @@
         android:id="@+id/btnOpenDoor"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Открыть дверь"
+        android:text="🚪 Открыть дверь"
         android:textSize="18sp"
         android:layout_marginBottom="16dp" />
 
@@ -32,7 +32,8 @@
         android:id="@+id/btnSetup"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Привязать ключ" />
+        android:text="⚙️ Настроить время"
+        android:textSize="16sp" />
 
     <TextView
         android:id="@+id/tvStatus"

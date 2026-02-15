@@ -13,28 +13,21 @@ class SetupActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_setup)
 
-        val doorManager = BleDoorManager(this)
-        val tilSecret = findViewById<TextInputLayout>(R.id.tilSecretKey)
-        val etSecret = findViewById<TextInputEditText>(R.id.etSecretKey)
-        val btnSave = findViewById<Button>(R.id.btnSaveKey)
+        val doorManager = ArduinoDoorManager(this)
+        val tilFixedTime = findViewById<TextInputLayout>(R.id.tilFixedTime)
+        val etFixedTime = findViewById<TextInputEditText>(R.id.etFixedTime)
+        val btnSave = findViewById<Button>(R.id.btnSave)
 
         btnSave.setOnClickListener {
-            val secret = etSecret.text?.toString()?.trim()?.uppercase() ?: ""
+            val fixedTimeStr = etFixedTime.text.toString().trim()
 
-            if (secret.length < 16) {
-                tilSecret.error = "Минимум 16 символов"
-                return@setOnClickListener
+            fixedTimeStr.toLongOrNull()?.let { fixedTime ->
+                doorManager.saveFixedTime(fixedTime)
+                Toast.makeText(this, "✅ Fixed time: $fixedTime", Toast.LENGTH_LONG).show()
+                finish()
+            } ?: run {
+                tilFixedTime.error = "Неверный формат числа"
             }
-
-            if (!secret.matches(Regex("^[A-Z2-7]+$"))) {
-                tilSecret.error = "Допустимы только A-Z и цифры 2-7"
-                return@setOnClickListener
-            }
-
-            tilSecret.error = null
-            doorManager.saveSecret(secret)
-            Toast.makeText(this, "Ключ сохранён", Toast.LENGTH_LONG).show()
-            finish()
         }
     }
 }
