@@ -3,44 +3,47 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="24dp"
+    android:padding="16dp"
     android:gravity="center">
-
-    <ImageView
-        android:layout_width="120dp"
-        android:layout_height="120dp"
-        android:src="@android:drawable/ic_lock_power_off"
-        android:layout_marginBottom="32dp" />
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Arduino SmartDoor"
-        android:textSize="28sp"
+        android:text="Smart Door"
+        android:textSize="24sp"
         android:textStyle="bold"
-        android:layout_marginBottom="40dp" />
+        android:layout_marginBottom="32dp"/>
+
+    <TextView
+        android:id="@+id/tvStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Проверка состояния..."
+        android:textSize="14sp"
+        android:layout_marginBottom="32dp"
+        android:padding="12dp"
+        android:background="#F5F5F5"
+        android:minHeight="120dp"/>
 
     <Button
         android:id="@+id/btnOpenDoor"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="🚪 Открыть дверь"
-        android:textSize="18sp"
-        android:layout_marginBottom="16dp" />
+        android:text="🔓 Открыть дверь"
+        android:layout_marginBottom="16dp"/>
 
     <Button
         android:id="@+id/btnSetup"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="⚙️ Настроить время"
-        android:textSize="16sp" />
+        android:text="⚙️ Настройки"
+        android:layout_marginBottom="16dp"/>
 
-    <TextView
-        android:id="@+id/tvStatus"
-        android:layout_width="wrap_content"
+    <Button
+        android:id="@+id/btnDebug"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Проверка..."
-        android:textSize="16sp"
-        android:layout_marginTop="32dp" />
+        android:text="🔧 Режим отладки"
+        android:backgroundTint="#FF9800"/>
 
 </LinearLayout>
