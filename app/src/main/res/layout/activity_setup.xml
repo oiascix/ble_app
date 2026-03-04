@@ -3,44 +3,39 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="24dp"
-    android:gravity="center">
+    android:padding="16dp">
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Настройка fixed_time"
+        android:text="Настройки устройства"
         android:textSize="24sp"
         android:textStyle="bold"
-        android:layout_marginBottom="24dp" />
+        android:layout_marginBottom="24dp"/>
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Unix timestamp генерации ключа\n(пример: 1640995200)"
+        android:text="Имя устройства Arduino:"
         android:textSize="16sp"
-        android:layout_marginBottom="24dp"
-        android:gravity="center" />
+        android:layout_marginBottom="8dp"/>
 
-    <com.google.android.material.textfield.TextInputLayout
-        android:id="@+id/tilFixedTime"
+    <EditText
+        android:id="@+id/etDeviceName"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Fixed time">
-
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/etFixedTime"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:inputType="number"
-            android:text="1640995200" />
-    </com.google.android.material.textfield.TextInputLayout>
+        android:hint="Arduino Lock"
+        android:textSize="16sp"
+        android:padding="12dp"
+        android:background="#F5F5F5"
+        android:layout_marginBottom="24dp"/>
 
     <Button
         android:id="@+id/btnSave"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Сохранить"
-        android:layout_marginTop="24dp" />
+        android:layout_height="50dp"
+        android:text="💾 Сохранить"
+        android:textSize="16sp"
+        android:backgroundTint="#2196F3"/>
 
 </LinearLayout>
