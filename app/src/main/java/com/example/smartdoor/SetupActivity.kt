@@ -13,24 +13,38 @@ class SetupActivity : AppCompatActivity() {
         setContentView(R.layout.activity_setup)
 
         val etDeviceName = findViewById<EditText>(R.id.etDeviceName)
+        val etCommand = findViewById<EditText>(R.id.etCommand)
         val btnSave = findViewById<Button>(R.id.btnSave)
 
-        // Загрузка текущего имени
+        // Загрузка текущих настроек
         val prefs = getPreferences(MODE_PRIVATE)
-        val currentName = prefs.getString("device_name", "Arduino Lock")
+        val currentName = prefs.getString("device_name", "HC-05")
+        val currentCommand = prefs.getString("command", "OPEN")
+
         etDeviceName.setText(currentName)
+        etCommand.setText(currentCommand)
 
         btnSave.setOnClickListener {
             val newName = etDeviceName.text.toString().trim()
+            val newCommand = etCommand.text.toString().trim()
+
             if (newName.isEmpty()) {
-                Toast.makeText(this, "Введите имя устройства", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "⚠️ Введите имя устройства", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
-            // Сохранение имени
-            prefs.edit().putString("device_name", newName).apply()
+            if (newCommand.isEmpty()) {
+                Toast.makeText(this, "⚠️ Введите команду", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
 
-            Toast.makeText(this, "✅ Имя устройства сохранено: $newName", Toast.LENGTH_SHORT).show()
+            // Сохранение настроек
+            prefs.edit()
+                .putString("device_name", newName)
+                .putString("command", newCommand)
+                .apply()
+
+            Toast.makeText(this, "✅ Настройки сохранены:\nУстройство: $newName\nКоманда: $newCommand", Toast.LENGTH_LONG).show()
             finish()
         }
     }
