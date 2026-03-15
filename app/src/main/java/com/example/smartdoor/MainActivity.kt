@@ -2,10 +2,7 @@ package com.example.smartdoor
 
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -13,6 +10,7 @@ import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 
@@ -21,8 +19,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btManager: BluetoothManager
     private lateinit var tvStatus: TextView
     private var isDebugMode = false
-    private var bluetoothStateReceiver: BroadcastReceiver? = null
 
+    // Явный запрос разрешений с обработкой результата
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -30,12 +28,18 @@ class MainActivity : AppCompatActivity() {
         if (allGranted) {
             updateStatus()
             Toast.makeText(this, "✅ Разрешения получены", Toast.LENGTH_SHORT).show()
+            // Автоматически запускаем сканирование после получения разрешений
+            if (btManager.isBluetoothEnabled()) {
+                tvStatus.text = "🔍 Поиск устройств Bluetooth..."
+                btManager.startDiscovery()
+            }
         } else {
-            tvStatus.text = "❌ Разрешения отклонены"
-            Toast.makeText(this, "Требуются разрешения для работы", Toast.LENGTH_LONG).show()
+            tvStatus.text = "❌ Разрешения отклонены\nТребуется доступ к геолокации для поиска устройств"
+            Toast.makeText(this, "Разрешите геолокацию в настройках приложения", Toast.LENGTH_LONG).show()
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.M)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -48,13 +52,14 @@ class MainActivity : AppCompatActivity() {
 
         // Кнопка открытия двери
         findViewById<Button>(R.id.btnOpenDoor).setOnClickListener {
-            if (!hasPermissions()) {
-                requestPermissions()
+            if (!btManager.isBluetoothEnabled()) {
+                Toast.makeText(this, "❌ Включите Bluetooth в настройках устройства", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
-            if (!btManager.isBluetoothEnabled()) {
-                Toast.makeText(this, "❌ Включите Bluetooth в настройках устройства", Toast.LENGTH_SHORT).show()
+            // Проверяем разрешения перед сканированием
+            if (!hasRequiredPermissions()) {
+                requestRequiredPermissions()
                 return@setOnClickListener
             }
 
@@ -71,32 +76,13 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnDebug)?.setOnClickListener {
             isDebugMode = !isDebugMode
             btManager.debugMode = isDebugMode
-
-            val modeText = if (isDebugMode) {
-                "🔧 Режим отладки: ВКЛ"
-            } else {
-                "🔧 Режим отладки: ВЫКЛ"
-            }
-
+            val modeText = if (isDebugMode) "🔧 Режим отладки: ВКЛ" else "🔧 Режим отладки: ВЫКЛ"
             Toast.makeText(this, modeText, Toast.LENGTH_SHORT).show()
             updateStatus()
         }
 
-        // Регистрация ресивера для отслеживания состояния Bluetooth
-        bluetoothStateReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                val action = intent.action
-                if (action == BluetoothAdapter.ACTION_STATE_CHANGED) {
-                    updateStatus()
-                }
-            }
-        }
-
-        val filter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
-        registerReceiver(bluetoothStateReceiver, filter)
-
-        // Проверка разрешений при запуске
-        checkPermissions()
+        // Первоначальная проверка разрешений и статуса
+        updateStatus()
     }
 
     private fun setupCallbacks() {
@@ -110,38 +96,28 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 tvStatus.text = "✅ Подключено, отправка команды..."
             }
-
-            // Отправляем команду через небольшую задержку
+            // Отправляем команду через короткую задержку
             android.os.Handler(mainLooper).postDelayed({
-                if (btManager.sendOpenCommand()) {
-                    // Команда отправлена
-                } else {
-                    runOnUiThread {
-                        val currentText = tvStatus.text.toString()
-                        tvStatus.text = currentText + "\n❌ Ошибка отправки команды"
-                    }
-                }
-            }, 500)
+                btManager.sendOpenCommand()
+            }, 300)
         }
 
         btManager.onCommandSent = { command ->
             runOnUiThread {
-                tvStatus.text = "📤 Команда '$command' отправлена"
+                tvStatus.text = "📤 Отправлена команда: $command"
             }
         }
 
         btManager.onCommandResponse = { response ->
             runOnUiThread {
-                val currentText = tvStatus.text.toString()
-                tvStatus.text = currentText + "\n📥 Ответ: $response"
-
+                val current = tvStatus.text.toString()
+                tvStatus.text = "$current\n📥 Ответ: $response"
                 if (response.contains("OK", ignoreCase = true)) {
-                    tvStatus.text = tvStatus.text.toString() + "\n🎉 Дверь должна открыться!"
-                    Toast.makeText(this, "✅ Дверь открыта!", Toast.LENGTH_SHORT).show()
+                    tvStatus.text = "$tvStatus.text\n🎉 Дверь открыта!"
+                    Toast.makeText(this, "✅ Успех! Дверь открыта", Toast.LENGTH_SHORT).show()
                 }
             }
-
-            // Отключаемся через 2 секунды после получения ответа
+            // Автоматическое отключение через 2 секунды
             android.os.Handler(mainLooper).postDelayed({
                 btManager.disconnect()
             }, 2000)
@@ -149,15 +125,15 @@ class MainActivity : AppCompatActivity() {
 
         btManager.onDisconnected = {
             runOnUiThread {
-                val currentText = tvStatus.text.toString()
-                tvStatus.text = currentText + "\n🔌 Отключено"
+                val current = tvStatus.text.toString()
+                tvStatus.text = "$current\n🔌 Отключено"
             }
         }
 
         btManager.onDiscoveryFinished = {
             runOnUiThread {
                 if (btManager.getDiscoveredDevices().isEmpty()) {
-                    tvStatus.text = "❌ Устройства не найдены\nПроверьте, что модуль включен и в радиусе действия"
+                    tvStatus.text = "❌ Устройства не найдены\nУбедитесь, что модуль включён и рядом"
                 }
             }
         }
@@ -170,94 +146,81 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun checkPermissions() {
-        val permissions = mutableListOf<String>()
-
-        // Разрешения для всех версий
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH)
+    // Проверка ВСЕХ необходимых разрешений
+    private fun hasRequiredPermissions(): Boolean {
+        // Геолокация ОБЯЗАТЕЛЬНА для сканирования на всех версиях Android 6.0+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED) {
-            permissions.add(Manifest.permission.BLUETOOTH)
+            return false
         }
 
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADMIN)
-            != PackageManager.PERMISSION_GRANTED) {
-            permissions.add(Manifest.permission.BLUETOOTH_ADMIN)
-        }
-
-        // Разрешение на геолокацию для сканирования (Android 6.0+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
-                permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
-            }
-        }
-
-        // Новые разрешения для Android 12+
+        // Для Android 12+ нужны дополнительные разрешения
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN)
                 != PackageManager.PERMISSION_GRANTED) {
-                permissions.add(Manifest.permission.BLUETOOTH_SCAN)
+                return false
             }
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
                 != PackageManager.PERMISSION_GRANTED) {
-                permissions.add(Manifest.permission.BLUETOOTH_CONNECT)
+                return false
             }
         }
 
-        if (permissions.isNotEmpty()) {
-            permissionLauncher.launch(permissions.toTypedArray())
-        } else {
-            updateStatus()
-        }
-    }
-
-    private fun requestPermissions() {
-        checkPermissions()
-    }
-
-    private fun hasPermissions(): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            return ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) ==
-                    PackageManager.PERMISSION_GRANTED &&
-                    ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) ==
-                    PackageManager.PERMISSION_GRANTED &&
-                    ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
-                    PackageManager.PERMISSION_GRANTED
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            return ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
-                    PackageManager.PERMISSION_GRANTED
-        }
         return true
     }
 
+    // Явный запрос ВСЕХ необходимых разрешений
+    @RequiresApi(Build.VERSION_CODES.M)
+    private fun requestRequiredPermissions() {
+        val permissions = mutableListOf<String>()
+
+        // Обязательно для сканирования
+        permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+
+        // Для Android 12+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            permissions.add(Manifest.permission.BLUETOOTH_SCAN)
+            permissions.add(Manifest.permission.BLUETOOTH_CONNECT)
+        }
+
+        // Показываем пояснение перед первым запросом
+        if (shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)) {
+            Toast.makeText(
+                this,
+                "Для поиска Bluetooth-устройств требуется доступ к геолокации",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+
+        permissionLauncher.launch(permissions.toTypedArray())
+    }
+
     private fun updateStatus() {
-        val status = StringBuilder()
+        val sb = StringBuilder()
 
         if (!btManager.isBluetoothSupported()) {
-            status.append("❌ Bluetooth не поддерживается этим устройством\n")
+            sb.append("❌ Bluetooth не поддерживается этим устройством\n")
         } else {
-            status.append("✅ Bluetooth поддерживается устройством\n")
+            sb.append("✅ Bluetooth поддерживается устройством\n")
         }
 
         if (!btManager.isBluetoothEnabled()) {
-            status.append("❌ Bluetooth отключен. Включите в настройках устройства.\n")
+            sb.append("❌ Bluetooth отключен. Включите в настройках устройства.\n")
         } else {
-            status.append("✅ Bluetooth включен и готов к работе\n")
+            sb.append("✅ Bluetooth включен и готов к работе\n")
         }
 
-        if (!hasPermissions()) {
-            status.append("❌ Необходимо предоставить разрешения для работы приложения\n")
+        if (!hasRequiredPermissions()) {
+            sb.append("⚠️ Требуются разрешения для поиска устройств\n")
         } else {
-            status.append("✅ Все необходимые разрешения предоставлены\n")
+            sb.append("✅ Все необходимые разрешения предоставлены\n")
         }
 
         if (btManager.debugMode) {
-            status.append("🔧 Режим отладки: ВКЛЮЧЕН (отображаются все устройства)\n")
+            sb.append("🔧 Режим отладки: ВКЛЮЧЕН\n")
         }
 
-        runOnUiThread {
-            tvStatus.text = status.toString()
-        }
+        tvStatus.text = sb.toString()
     }
 
     override fun onResume() {
@@ -268,14 +231,5 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         btManager.destroy()
-
-        // Отмена регистрации ресивера
-        bluetoothStateReceiver?.let {
-            try {
-                unregisterReceiver(it)
-            } catch (e: Exception) {
-                // Игнорируем ошибку, если ресивер уже отменён
-            }
-        }
     }
 }
