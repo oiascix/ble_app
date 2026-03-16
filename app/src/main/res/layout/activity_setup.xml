@@ -1,145 +1,210 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F5F5F5">
+    android:orientation="vertical"
+    android:background="#0F1117">
 
+    <!-- Toolbar -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="16dp">
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="8dp"
+        android:background="#1A1D27">
 
-        <!-- Заголовок -->
+        <ImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@android:drawable/ic_media_previous"
+            android:backgroundTint="#00000000"
+            app:tint="#EAEDF5" />
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="⚙️ Настройки устройства"
-            android:textSize="28sp"
-            android:textStyle="bold"
-            android:textColor="#2196F3"
-            android:layout_marginBottom="24dp"
-            android:fontFamily="sans-serif-medium"/>
-
-        <!-- Имя устройства -->
-        <androidx.cardview.widget.CardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            app:cardCornerRadius="12dp"
-            app:cardElevation="4dp"
-            app:cardBackgroundColor="#FFFFFF"
-            xmlns:app="http://schemas.android.com/apk/res-auto">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="📱 Имя устройства Bluetooth"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    android:textColor="#1565C0"
-                    android:layout_marginBottom="8dp"/>
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Введите имя вашего модуля HC-05/HC-06"
-                    android:textSize="14sp"
-                    android:textColor="#757575"
-                    android:layout_marginBottom="12dp"/>
-
-                <EditText
-                    android:id="@+id/etDeviceName"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="HC-05"
-                    android:textSize="16sp"
-                    android:padding="12dp"
-                    android:background="#F5F5F5"
-                    android:inputType="text"
-                    android:maxLines="1"/>
-
-            </LinearLayout>
-
-        </androidx.cardview.widget.CardView>
-
-        <!-- Команда -->
-        <androidx.cardview.widget.CardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="24dp"
-            app:cardCornerRadius="12dp"
-            app:cardElevation="4dp"
-            app:cardBackgroundColor="#FFFFFF"
-            xmlns:app="http://schemas.android.com/apk/res-auto">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="📡 Команда открытия"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    android:textColor="#1565C0"
-                    android:layout_marginBottom="8dp"/>
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Введите команду, которая будет отправлена на устройство"
-                    android:textSize="14sp"
-                    android:textColor="#757575"
-                    android:layout_marginBottom="12dp"/>
-
-                <EditText
-                    android:id="@+id/etCommand"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="OPEN"
-                    android:textSize="16sp"
-                    android:padding="12dp"
-                    android:background="#F5F5F5"
-                    android:inputType="text"
-                    android:maxLines="1"/>
-
-            </LinearLayout>
-
-        </androidx.cardview.widget.CardView>
-
-        <!-- Кнопка сохранения -->
-        <Button
-            android:id="@+id/btnSave"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:text="💾 Сохранить настройки"
+            android:layout_marginStart="4dp"
+            android:text="Добавить замок"
+            android:textColor="#EAEDF5"
             android:textSize="18sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="16dp"
-            android:backgroundTint="#4CAF50"
-            android:elevation="6dp"/>
-
-        <!-- Информация -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="ℹ️ По умолчанию:\n• Имя устройства: HC-05\n• Команда: OPEN"
-            android:textSize="13sp"
-            android:textColor="#757575"
-            android:padding="16dp"
-            android:background="#FFF3E0"
-            android:lineSpacingExtra="3dp"/>
-
+            android:textStyle="bold" />
     </LinearLayout>
 
-</ScrollView>
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <!-- Имя замка -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Имя замка (необязательно)"
+                android:textColor="#8B91A8"
+                android:textSize="13sp"
+                android:layout_marginBottom="4dp" />
+
+            <EditText
+                android:id="@+id/etName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="20dp"
+                android:hint="Например: Входная дверь"
+                android:textColor="#EAEDF5"
+                android:textColorHint="#555A72"
+                android:backgroundTint="#3D7EFF"
+                android:inputType="text" />
+
+            <!-- Переключатель режима -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="16dp">
+
+                <RadioButton
+                    android:id="@+id/tabQr"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="По QR-коду"
+                    android:textColor="#EAEDF5"
+                    android:buttonTint="#3D7EFF"
+                    android:checked="true" />
+
+                <RadioButton
+                    android:id="@+id/tabManual"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Вручную"
+                    android:textColor="#EAEDF5"
+                    android:buttonTint="#3D7EFF" />
+            </LinearLayout>
+
+            <!-- ═══════════════ ПАНЕЛЬ QR ═══════════════ -->
+            <LinearLayout
+                android:id="@+id/panelQr"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <!-- Кнопка сканирования -->
+                <Button
+                    android:id="@+id/btnScan"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:layout_marginBottom="12dp"
+                    android:text="📷  Сканировать QR-код"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp"
+                    android:backgroundTint="#34C779" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="или введите строку вручную:"
+                    android:textColor="#8B91A8"
+                    android:textSize="12sp"
+                    android:layout_marginBottom="4dp" />
+
+                <EditText
+                    android:id="@+id/etQrData"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:hint="3627YBEZELDNIYDHBJSVKW22UVUN75RZMNRJ"
+                    android:textColor="#EAEDF5"
+                    android:textColorHint="#555A72"
+                    android:backgroundTint="#3D7EFF"
+                    android:fontFamily="monospace"
+                    android:textSize="12sp"
+                    android:inputType="textNoSuggestions|textCapCharacters" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Отсканируйте QR-код, который Arduino показывает в Serial Monitor (строка «📱 QR строка:» при команде 0). Первые 4 символа — PIN, остальное — Base32 ключ."
+                    android:textColor="#555A72"
+                    android:textSize="12sp"
+                    android:layout_marginBottom="16dp" />
+            </LinearLayout>
+
+            <!-- ═══════════════ ПАНЕЛЬ РУЧНОГО ВВОДА ═══════════════ -->
+            <LinearLayout
+                android:id="@+id/panelManual"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Base32 ключ (строка «🔑 Base32:»)"
+                    android:textColor="#8B91A8"
+                    android:textSize="13sp"
+                    android:layout_marginBottom="4dp" />
+
+                <EditText
+                    android:id="@+id/etBase32"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:hint="YBEZELDNIYDHBJSVKW22UVUN75RZMNRJ"
+                    android:textColor="#EAEDF5"
+                    android:textColorHint="#555A72"
+                    android:backgroundTint="#3D7EFF"
+                    android:fontFamily="monospace"
+                    android:inputType="textNoSuggestions|textCapCharacters" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="UID замка (строка «✅ UID:»)"
+                    android:textColor="#8B91A8"
+                    android:textSize="13sp"
+                    android:layout_marginBottom="4dp" />
+
+                <EditText
+                    android:id="@+id/etUid"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:hint="12345678"
+                    android:textColor="#EAEDF5"
+                    android:textColorHint="#555A72"
+                    android:backgroundTint="#3D7EFF"
+                    android:fontFamily="monospace"
+                    android:inputType="number" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Оба значения из вывода команды «0» в Serial Monitor Arduino."
+                    android:textColor="#555A72"
+                    android:textSize="12sp"
+                    android:layout_marginBottom="16dp" />
+            </LinearLayout>
+
+            <!-- Сохранить -->
+            <Button
+                android:id="@+id/btnSave"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Сохранить замок"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#3D7EFF" />
+
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

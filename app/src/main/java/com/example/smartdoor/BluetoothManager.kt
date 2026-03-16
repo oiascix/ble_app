@@ -1,6 +1,5 @@
 package com.example.smartdoor
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -15,24 +14,31 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.*
 
+/**
+ * Управляет Bluetooth SPP соединением с HC-05 (BLE_LOCKER).
+ *
+ * Протокол открытия замка:
+ *   1. Сканирование / поиск устройства по имени
+ *   2. RFCOMM-подключение (SPP UUID)
+ *   3. Отправка строки: "TTTTTTTTXXXXXXXXXX" (8 цифр TOTP + 10 цифр unixTime)
+ *   4. Arduino проверяет TOTP и открывает замок
+ */
+@SuppressLint("MissingPermission")
 class BluetoothManager(private val context: Context) {
 
     companion object {
         private const val TAG = "SmartDoor"
-        private const val DISCOVERY_TIMEOUT_MS = 12000L
-        private const val UUID_SPP = "00001101-0000-1000-8000-00805F9B34FB"
+        private const val DISCOVERY_TIMEOUT_MS = 12_000L
+        private const val CONNECTION_TIMEOUT_MS = 10_000L
+        val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
     }
 
-    // Настройки (можно изменить через приложение)
-    var targetDeviceName = "HC-05"
-    var commandPrefix = "OPEN"
-    var debugMode = false
+    // ── Настройки ─────────────────────────────────────────────────────────────
+    var targetDeviceName = "BLE_LOCKER"  // Имя HC-05 (устанавливается в configureHC05())
+    var debugMode = false                 // Показывать все устройства при сканировании
 
-    // Внутренние переменные
-    private val bluetoothAdapter: BluetoothAdapter? by lazy {
-        BluetoothAdapter.getDefaultAdapter()
-    }
-
+    // ── Состояние ─────────────────────────────────────────────────────────────
+    private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
     private var discoveryReceiver: BroadcastReceiver? = null
     private var socket: BluetoothSocket? = null
     private var outputStream: OutputStream? = null
@@ -40,288 +46,212 @@ class BluetoothManager(private val context: Context) {
     private var isDiscovering = false
     private val discoveredDevices = mutableListOf<BluetoothDevice>()
 
-    // Callbacks
-    var onDeviceFound: ((String, String) -> Unit)? = null
+    // ── Callbacks ─────────────────────────────────────────────────────────────
+    var onDeviceFound: ((name: String, address: String) -> Unit)? = null
     var onConnected: (() -> Unit)? = null
     var onDisconnected: (() -> Unit)? = null
-    var onCommandSent: ((String) -> Unit)? = null
-    var onCommandResponse: ((String) -> Unit)? = null
-    var onError: ((String) -> Unit)? = null
+    var onCommandSent: ((command: String) -> Unit)? = null
+    var onCommandResponse: ((response: String) -> Unit)? = null
+    var onError: ((message: String) -> Unit)? = null
     var onDiscoveryFinished: (() -> Unit)? = null
 
-    // Проверки состояния
-    fun isBluetoothSupported(): Boolean = bluetoothAdapter != null
-    fun isBluetoothEnabled(): Boolean = bluetoothAdapter?.isEnabled ?: false
+    // ── Bluetooth state ───────────────────────────────────────────────────────
+    fun isSupported() = bluetoothAdapter != null
+    fun isEnabled() = bluetoothAdapter?.isEnabled == true
+    val isConnected get() = socket?.isConnected == true
 
-    // ЗАПУСК СКАНИРОВАНИЯ (с аннотацией для подавления предупреждений)
-    @SuppressLint("MissingPermission")
+    // ── Discovery ─────────────────────────────────────────────────────────────
+
     fun startDiscovery() {
-        // Базовые проверки
-        if (!isBluetoothSupported()) {
-            onError?.invoke("Bluetooth не поддерживается")
+        if (!isSupported()) { onError?.invoke("Bluetooth не поддерживается"); return }
+        if (!isEnabled())   { onError?.invoke("Bluetooth отключён. Включите в настройках."); return }
+        if (isDiscovering)  { return }
+
+        // Сначала ищем среди уже сопряжённых устройств
+        val bonded = bluetoothAdapter!!.bondedDevices
+            ?.firstOrNull { it.name?.contains(targetDeviceName, ignoreCase = true) == true }
+        if (bonded != null) {
+            Log.d(TAG, "✅ Найдено сопряжённое устройство: ${bonded.name}")
+            onDeviceFound?.invoke(bonded.name ?: targetDeviceName, bonded.address)
+            connect(bonded)
             return
         }
 
-        if (!isBluetoothEnabled()) {
-            onError?.invoke("Bluetooth отключен")
-            return
-        }
-
-        if (isDiscovering) {
-            Log.d(TAG, "Сканирование уже запущено")
-            return
-        }
-
+        // Если не нашли среди сопряжённых — сканируем
         discoveredDevices.clear()
-
-        // Регистрация ресивера для обнаружения устройств
         discoveryReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 when (intent.action) {
                     BluetoothDevice.ACTION_FOUND -> {
-                        val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
-                        device?.let { processDiscoveredDevice(it) }
+                        val device: BluetoothDevice? =
+                            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                        device?.let { handleDiscovered(it) }
                     }
                     BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
                         isDiscovering = false
                         unregisterReceiver()
-                        Log.d(TAG, "Сканирование завершено. Найдено: ${discoveredDevices.size} устройств")
+                        Log.d(TAG, "Сканирование завершено. Найдено: ${discoveredDevices.size}")
+                        if (discoveredDevices.isEmpty())
+                            onError?.invoke("Устройство не найдено. Проверьте, что модуль включён.")
                         onDiscoveryFinished?.invoke()
                     }
                 }
             }
         }
 
-        // Регистрация ресивера
         val filter = IntentFilter().apply {
             addAction(BluetoothDevice.ACTION_FOUND)
             addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
         }
-
-        try {
-            @SuppressLint("MissingPermission")
-            context.registerReceiver(discoveryReceiver, filter)
-        } catch (e: Exception) {
-            Log.e(TAG, "Ошибка регистрации ресивера", e)
-            onError?.invoke("Ошибка регистрации: ${e.message}")
-            return
-        }
-
+        context.registerReceiver(discoveryReceiver, filter)
         isDiscovering = true
-        Log.d(TAG, "Запуск сканирования Bluetooth...")
 
-        // Запуск сканирования с обработкой исключений
-        try {
-            @SuppressLint("MissingPermission")
-            val started = bluetoothAdapter?.startDiscovery() ?: false
-
-            if (started) {
-                Log.d(TAG, "Сканирование запущено")
-                // Таймаут для автоматической остановки
-                Timer().schedule(object : TimerTask() {
-                    override fun run() {
-                        if (isDiscovering) {
-                            Log.w(TAG, "Таймаут сканирования")
-                            cancelDiscovery()
-                        }
-                    }
-                }, DISCOVERY_TIMEOUT_MS)
-            } else {
-                throw IOException("Не удалось запустить сканирование")
-            }
-        } catch (e: SecurityException) {
-            Log.e(TAG, "SecurityException при сканировании", e)
-            onError?.invoke("Требуется разрешение на геолокацию")
-            cancelDiscovery()
-        } catch (e: Exception) {
-            Log.e(TAG, "Ошибка запуска сканирования", e)
-            onError?.invoke("Ошибка сканирования: ${e.message}")
-            cancelDiscovery()
+        if (bluetoothAdapter.startDiscovery()) {
+            Log.d(TAG, "🔍 Сканирование запущено")
+            Timer().schedule(object : TimerTask() {
+                override fun run() { if (isDiscovering) cancelDiscovery() }
+            }, DISCOVERY_TIMEOUT_MS)
+        } else {
+            unregisterReceiver(); isDiscovering = false
+            onError?.invoke("Не удалось запустить сканирование")
         }
     }
 
-    // Обработка найденного устройства
-    private fun processDiscoveredDevice(device: BluetoothDevice) {
+    private fun handleDiscovered(device: BluetoothDevice) {
         val name = device.name ?: "Unknown"
-        val address = device.address
-
+        val addr = device.address
         if (debugMode) {
-            Log.d(TAG, "Найдено: $name | MAC: $address")
-        }
-
-        // В режиме отладки показываем все устройства
-        if (debugMode) {
+            Log.d(TAG, "📡 Найдено: $name | $addr")
             if (!discoveredDevices.contains(device)) {
-                discoveredDevices.add(device)
-                onDeviceFound?.invoke(name, address)
+                discoveredDevices.add(device); onDeviceFound?.invoke(name, addr)
             }
             return
         }
-
-        // Ищем устройство по имени
         if (name.contains(targetDeviceName, ignoreCase = true)) {
-            Log.d(TAG, "Целевое устройство найдено: $name ($address)")
+            Log.d(TAG, "🎯 Целевое устройство: $name ($addr)")
             if (!discoveredDevices.contains(device)) {
                 discoveredDevices.add(device)
-                onDeviceFound?.invoke(name, address)
+                onDeviceFound?.invoke(name, addr)
                 cancelDiscovery()
                 connect(device)
             }
         }
     }
 
-    // ОТМЕНА СКАНИРОВАНИЯ
-    @SuppressLint("MissingPermission")
     fun cancelDiscovery() {
         if (isDiscovering) {
-            try {
-                bluetoothAdapter?.cancelDiscovery()
-                Log.d(TAG, "Сканирование остановлено")
-            } catch (e: Exception) {
-                Log.w(TAG, "Ошибка остановки сканирования", e)
-            }
+            try { bluetoothAdapter?.cancelDiscovery() } catch (_: Exception) {}
         }
         unregisterReceiver()
         isDiscovering = false
     }
 
-    // Отмена регистрации ресивера
     private fun unregisterReceiver() {
         try {
-            discoveryReceiver?.let {
-                context.unregisterReceiver(it)
-                discoveryReceiver = null
-            }
-        } catch (e: Exception) {
-            discoveryReceiver = null
-        }
+            discoveryReceiver?.let { context.unregisterReceiver(it) }
+        } catch (_: Exception) {}
+        discoveryReceiver = null
     }
 
-    // ПОДКЛЮЧЕНИЕ К УСТРОЙСТВУ
-    @SuppressLint("MissingPermission")
-    fun connect(device: BluetoothDevice) {
-        Log.d(TAG, "Подключение к ${device.name} (${device.address})")
+    // ── Connection ────────────────────────────────────────────────────────────
 
+    fun connect(device: BluetoothDevice) {
+        Log.d(TAG, "🔗 Подключение к ${device.name} (${device.address})")
         Thread {
             try {
-                // Создание RFCOMM сокета
-                val uuid = UUID.fromString(UUID_SPP)
-                val tmpSocket = device.createRfcommSocketToServiceRecord(uuid)
-
-                // Отмена сканирования освобождает ресурсы
-                @SuppressLint("MissingPermission")
+                val tmpSocket = device.createRfcommSocketToServiceRecord(SPP_UUID)
                 bluetoothAdapter?.cancelDiscovery()
 
                 // Подключение с таймаутом
-                tmpSocket.connect()
-
-                if (!tmpSocket.isConnected) {
-                    throw IOException("Не удалось подключиться")
+                var connectError: Exception? = null
+                val t = Thread {
+                    try { tmpSocket.connect() }
+                    catch (e: IOException) { connectError = e; try { tmpSocket.close() } catch (_: Exception) {} }
                 }
+                t.start(); t.join(CONNECTION_TIMEOUT_MS)
 
-                // Сохранение соединения
+                if (connectError != null) throw connectError!!
+                if (!tmpSocket.isConnected) throw IOException("Таймаут подключения")
+
                 socket = tmpSocket
-                outputStream = socket?.outputStream
-                inputStream = socket?.inputStream
-
-                Log.d(TAG, "Подключение установлено")
+                outputStream = tmpSocket.outputStream
+                inputStream  = tmpSocket.inputStream
+                Log.d(TAG, "✅ Подключено")
                 onConnected?.invoke()
-
-                // Запуск потока для чтения ответов
                 startResponseListener()
 
-            } catch (e: SecurityException) {
-                Log.e(TAG, "SecurityException при подключении", e)
-                onError?.invoke("Ошибка подключения: требуется разрешение")
-                disconnect()
-            } catch (e: IOException) {
-                Log.e(TAG, "IOException при подключении", e)
-                onError?.invoke("Ошибка подключения: ${e.message}")
-                disconnect()
             } catch (e: Exception) {
-                Log.e(TAG, "Ошибка подключения", e)
-                onError?.invoke("Ошибка: ${e.message}")
+                Log.e(TAG, "❌ Ошибка подключения", e)
+                onError?.invoke("Ошибка подключения: ${e.message ?: "Неизвестная ошибка"}")
                 disconnect()
             }
         }.start()
     }
 
-    // Поток для чтения ответов от устройства
     private fun startResponseListener() {
         Thread {
-            val buffer = ByteArray(1024)
-            val input = inputStream ?: return@Thread
-
+            val buf = ByteArray(1024)
+            val stream = inputStream ?: return@Thread
             while (true) {
                 try {
-                    val bytes = input.read(buffer)
-                    if (bytes > 0) {
-                        val response = String(buffer, 0, bytes).trim()
-                        Log.d(TAG, "Получен ответ: $response")
-                        onCommandResponse?.invoke(response)
+                    val n = stream.read(buf)
+                    if (n > 0) {
+                        val resp = String(buf, 0, n).trim()
+                        Log.d(TAG, "📥 Ответ: $resp")
+                        onCommandResponse?.invoke(resp)
                     }
-                } catch (e: IOException) {
-                    break // Соединение разорвано
-                } catch (e: Exception) {
-                    break
-                }
+                } catch (_: IOException) { break }
             }
-            Log.d(TAG, "Поток чтения завершён")
         }.start()
     }
 
-    // ОТПРАВКА КОМАНДЫ
-    @SuppressLint("MissingPermission")
-    fun sendCommand(command: String): Boolean {
-        if (socket == null || !socket!!.isConnected) {
-            onError?.invoke("Устройство не подключено")
-            return false
-        }
+    // ── Send ──────────────────────────────────────────────────────────────────
 
+    /**
+     * Отправляет TOTP-команду для конкретного замка.
+     * Формат: "TTTTTTTTXXXXXXXXXX" (18 символов)
+     */
+    fun sendTotpCommand(lock: LockEntry): Boolean {
+        val now = System.currentTimeMillis() / 1000L
+        val command = TotpHelper.buildCommand(lock.secretBytes, now)
+        Log.d(TAG, "📤 TOTP команда для замка ${lock.uidStr}: $command (time=$now)")
+        return sendRaw(command)
+    }
+
+    /**
+     * Отправляет произвольную строку (для отладки / старого протокола).
+     */
+    fun sendRaw(text: String): Boolean {
+        if (!isConnected) { onError?.invoke("Устройство не подключено"); return false }
         return try {
-            // Добавляем символ новой строки для корректной обработки на Arduino
-            val finalCommand = if (command.endsWith("\n")) command else "$command\n"
-            outputStream?.write(finalCommand.toByteArray())
-            outputStream?.flush()
-            Log.d(TAG, "Отправлена команда: $command")
-            onCommandSent?.invoke(command)
+            val data = if (text.endsWith("\n")) text else "$text\n"
+            outputStream!!.write(data.toByteArray())
+            outputStream!!.flush()
+            Log.d(TAG, "📤 Отправлено: $text")
+            onCommandSent?.invoke(text)
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Ошибка отправки команды", e)
+            Log.e(TAG, "❌ Ошибка отправки", e)
             onError?.invoke("Ошибка отправки: ${e.message}")
             false
         }
     }
 
-    // Удобные методы для отправки команд
-    fun sendOpenCommand(): Boolean = sendCommand(commandPrefix)
-    fun sendCloseCommand(): Boolean = sendCommand("CLOSE")
+    // ── Disconnect / Destroy ──────────────────────────────────────────────────
 
-    // ОТКЛЮЧЕНИЕ
-    @SuppressLint("MissingPermission")
     fun disconnect() {
-        try {
-            outputStream?.close()
-            inputStream?.close()
-            socket?.close()
-            Log.d(TAG, "Отключено от устройства")
-            onDisconnected?.invoke()
-        } catch (e: Exception) {
-            Log.w(TAG, "Ошибка отключения", e)
-        } finally {
-            socket = null
-            outputStream = null
-            inputStream = null
-        }
+        try { outputStream?.close() } catch (_: Exception) {}
+        try { inputStream?.close()  } catch (_: Exception) {}
+        try { socket?.close()       } catch (_: Exception) {}
+        socket = null; outputStream = null; inputStream = null
+        Log.d(TAG, "🔌 Отключено")
+        onDisconnected?.invoke()
     }
 
-    // ОЧИСТКА РЕСУРСОВ
     fun destroy() {
-        try { cancelDiscovery() } catch (e: Exception) { /* ignore */ }
-        try { disconnect() } catch (e: Exception) { /* ignore */ }
-        Log.d(TAG, "Ресурсы освобождены")
+        try { cancelDiscovery() } catch (_: Exception) {}
+        try { disconnect()      } catch (_: Exception) {}
     }
 
-    // Получение списка найденных устройств
     fun getDiscoveredDevices(): List<BluetoothDevice> = discoveredDevices
 }

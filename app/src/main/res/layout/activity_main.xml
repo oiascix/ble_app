@@ -1,112 +1,117 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F5F5F5">
+    android:orientation="vertical"
+    android:background="#0F1117">
 
+    <!-- Toolbar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="16dp"
+        android:background="#1A1D27">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="SmartLock"
+            android:textColor="#EAEDF5"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btnAddLock"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="+ Добавить"
+            android:textSize="13sp"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#3D7EFF" />
+    </LinearLayout>
+
+    <!-- Статус -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="16dp">
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="16dp"
+        android:background="#1A1D27"
+        android:layout_marginTop="1dp">
 
-        <!-- Заголовок -->
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Инициализация..."
+            android:textColor="#8B91A8"
+            android:textSize="13sp" />
+
+        <ProgressBar
+            android:id="@+id/progressBar"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:visibility="gone"
+            android:indeterminateTint="#3D7EFF" />
+    </LinearLayout>
+
+    <!-- Список замков -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvLocks"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="12dp"
+        android:clipToPadding="false"
+        android:visibility="gone" />
+
+    <!-- Пустое состояние -->
+    <LinearLayout
+        android:id="@+id/layoutEmpty"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="32dp">
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="🚪 Smart Door"
-            android:textSize="32sp"
-            android:textStyle="bold"
-            android:textColor="#2196F3"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginBottom="24dp"
-            android:fontFamily="sans-serif-medium"/>
+            android:text="🔒"
+            android:textSize="64sp" />
 
-        <!-- Статус -->
-        <androidx.cardview.widget.CardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="24dp"
-            app:cardCornerRadius="12dp"
-            app:cardElevation="4dp"
-            app:cardBackgroundColor="#FFFFFF"
-            xmlns:app="http://schemas.android.com/apk/res-auto">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="📊 Статус системы"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    android:textColor="#1565C0"
-                    android:layout_marginBottom="12dp"/>
-
-                <TextView
-                    android:id="@+id/tvStatus"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Проверка состояния..."
-                    android:textSize="14sp"
-                    android:textColor="#424242"
-                    android:lineSpacingExtra="4dp"
-                    android:minHeight="100dp"/>
-
-            </LinearLayout>
-
-        </androidx.cardview.widget.CardView>
-
-        <!-- Кнопка открытия двери -->
-        <Button
-            android:id="@+id/btnOpenDoor"
-            android:layout_width="match_parent"
-            android:layout_height="60dp"
-            android:text="🔓 ОТКРЫТЬ ДВЕРЬ"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:textColor="#FFFFFF"
-            android:layout_marginBottom="16dp"
-            android:backgroundTint="#4CAF50"
-            android:elevation="6dp"/>
-
-        <!-- Кнопка настроек -->
-        <Button
-            android:id="@+id/btnSetup"
-            android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:text="⚙️ Настройки устройства"
-            android:textSize="16sp"
-            android:layout_marginBottom="12dp"
-            android:backgroundTint="#2196F3"
-            android:elevation="4dp"/>
-
-        <!-- Кнопка отладки -->
-        <Button
-            android:id="@+id/btnDebug"
-            android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:text="🔧 Режим отладки"
-            android:textSize="16sp"
-            android:backgroundTint="#FF9800"
-            android:elevation="4dp"/>
-
-        <!-- Информация -->
         <TextView
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="💡 Подсказка: Убедитесь, что модуль Bluetooth (HC-05/HC-06) включен и находится в зоне действия"
-            android:textSize="12sp"
-            android:textColor="#757575"
-            android:layout_marginTop="24dp"
-            android:padding="12dp"
-            android:background="#E3F2FD"
-            android:lineSpacingExtra="2dp"/>
+            android:layout_marginTop="16dp"
+            android:text="Замков пока нет"
+            android:textColor="#EAEDF5"
+            android:textSize="18sp"
+            android:textStyle="bold" />
 
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Добавьте замок через QR-код\nили введите данные вручную"
+            android:textColor="#8B91A8"
+            android:textSize="14sp"
+            android:gravity="center" />
+
+        <Button
+            android:id="@+id/btnAddLockEmpty"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="Добавить замок"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#3D7EFF" />
     </LinearLayout>
 
-</ScrollView>
+</LinearLayout>

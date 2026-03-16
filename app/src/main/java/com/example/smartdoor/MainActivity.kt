@@ -2,234 +2,291 @@ package com.example.smartdoor
 
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.widget.Button
-import android.widget.TextView
-import android.widget.Toast
+import android.os.Handler
+import android.os.Looper
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.RequiresApi
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var btManager: BluetoothManager
+    private lateinit var bt: BluetoothManager
+    private lateinit var prefs: LockPrefs
     private lateinit var tvStatus: TextView
-    private var isDebugMode = false
+    private lateinit var rvLocks: RecyclerView
+    private lateinit var layoutEmpty: LinearLayout
+    private lateinit var progressBar: ProgressBar
+    private lateinit var adapter: LockAdapter
 
-    // Явный запрос разрешений с обработкой результата
-    private val permissionLauncher = registerForActivityResult(
+    private var activeLock: LockEntry? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private var btStateReceiver: BroadcastReceiver? = null
+
+    // ── Разрешения ────────────────────────────────────────────────────────────
+
+    private val permLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val allGranted = permissions.values.all { it }
-        if (allGranted) {
-            updateStatus()
-            Toast.makeText(this, "✅ Разрешения получены", Toast.LENGTH_SHORT).show()
-            // Автоматически запускаем сканирование после получения разрешений
-            if (btManager.isBluetoothEnabled()) {
-                tvStatus.text = "🔍 Поиск устройств Bluetooth..."
-                btManager.startDiscovery()
-            }
-        } else {
-            tvStatus.text = "❌ Разрешения отклонены\nТребуется доступ к геолокации для поиска устройств"
-            Toast.makeText(this, "Разрешите геолокацию в настройках приложения", Toast.LENGTH_LONG).show()
-        }
+    ) { results ->
+        if (results.values.all { it }) updateStatus()
+        else toast("Необходимы разрешения Bluetooth для работы приложения")
     }
 
-    @RequiresApi(Build.VERSION_CODES.M)
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        btManager = BluetoothManager(this)
-        tvStatus = findViewById(R.id.tvStatus)
+        bt    = BluetoothManager(this)
+        prefs = LockPrefs(this)
 
-        // Настройка колбэков
-        setupCallbacks()
+        tvStatus    = findViewById(R.id.tvStatus)
+        rvLocks     = findViewById(R.id.rvLocks)
+        layoutEmpty = findViewById(R.id.layoutEmpty)
+        progressBar = findViewById(R.id.progressBar)
 
-        // Кнопка открытия двери
-        findViewById<Button>(R.id.btnOpenDoor).setOnClickListener {
-            if (!btManager.isBluetoothEnabled()) {
-                Toast.makeText(this, "❌ Включите Bluetooth в настройках устройства", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
+        setupRecyclerView()
+        setupButtons()
+        setupBtCallbacks()
 
-            // Проверяем разрешения перед сканированием
-            if (!hasRequiredPermissions()) {
-                requestRequiredPermissions()
-                return@setOnClickListener
-            }
-
-            tvStatus.text = "🔍 Поиск устройств Bluetooth..."
-            btManager.startDiscovery()
-        }
-
-        // Кнопка настроек
-        findViewById<Button>(R.id.btnSetup).setOnClickListener {
-            startActivity(Intent(this, SetupActivity::class.java))
-        }
-
-        // Кнопка отладки
-        findViewById<Button>(R.id.btnDebug)?.setOnClickListener {
-            isDebugMode = !isDebugMode
-            btManager.debugMode = isDebugMode
-            val modeText = if (isDebugMode) "🔧 Режим отладки: ВКЛ" else "🔧 Режим отладки: ВЫКЛ"
-            Toast.makeText(this, modeText, Toast.LENGTH_SHORT).show()
-            updateStatus()
-        }
-
-        // Первоначальная проверка разрешений и статуса
-        updateStatus()
-    }
-
-    private fun setupCallbacks() {
-        btManager.onDeviceFound = { name, address ->
-            runOnUiThread {
-                tvStatus.text = "🎯 Найдено: $name\nMAC: $address"
+        // Следим за состоянием Bluetooth
+        btStateReceiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) {
+                if (i.action == BluetoothAdapter.ACTION_STATE_CHANGED) updateStatus()
             }
         }
+        registerReceiver(btStateReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
 
-        btManager.onConnected = {
-            runOnUiThread {
-                tvStatus.text = "✅ Подключено, отправка команды..."
-            }
-            // Отправляем команду через короткую задержку
-            android.os.Handler(mainLooper).postDelayed({
-                btManager.sendOpenCommand()
-            }, 300)
-        }
-
-        btManager.onCommandSent = { command ->
-            runOnUiThread {
-                tvStatus.text = "📤 Отправлена команда: $command"
-            }
-        }
-
-        btManager.onCommandResponse = { response ->
-            runOnUiThread {
-                val current = tvStatus.text.toString()
-                tvStatus.text = "$current\n📥 Ответ: $response"
-                if (response.contains("OK", ignoreCase = true)) {
-                    tvStatus.text = "$tvStatus.text\n🎉 Дверь открыта!"
-                    Toast.makeText(this, "✅ Успех! Дверь открыта", Toast.LENGTH_SHORT).show()
-                }
-            }
-            // Автоматическое отключение через 2 секунды
-            android.os.Handler(mainLooper).postDelayed({
-                btManager.disconnect()
-            }, 2000)
-        }
-
-        btManager.onDisconnected = {
-            runOnUiThread {
-                val current = tvStatus.text.toString()
-                tvStatus.text = "$current\n🔌 Отключено"
-            }
-        }
-
-        btManager.onDiscoveryFinished = {
-            runOnUiThread {
-                if (btManager.getDiscoveredDevices().isEmpty()) {
-                    tvStatus.text = "❌ Устройства не найдены\nУбедитесь, что модуль включён и рядом"
-                }
-            }
-        }
-
-        btManager.onError = { error ->
-            runOnUiThread {
-                tvStatus.text = "❌ Ошибка: $error"
-                Toast.makeText(this, "Ошибка: $error", Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-
-    // Проверка ВСЕХ необходимых разрешений
-    private fun hasRequiredPermissions(): Boolean {
-        // Геолокация ОБЯЗАТЕЛЬНА для сканирования на всех версиях Android 6.0+
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-            != PackageManager.PERMISSION_GRANTED) {
-            return false
-        }
-
-        // Для Android 12+ нужны дополнительные разрешения
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN)
-                != PackageManager.PERMISSION_GRANTED) {
-                return false
-            }
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
-                != PackageManager.PERMISSION_GRANTED) {
-                return false
-            }
-        }
-
-        return true
-    }
-
-    // Явный запрос ВСЕХ необходимых разрешений
-    @RequiresApi(Build.VERSION_CODES.M)
-    private fun requestRequiredPermissions() {
-        val permissions = mutableListOf<String>()
-
-        // Обязательно для сканирования
-        permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
-
-        // Для Android 12+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            permissions.add(Manifest.permission.BLUETOOTH_SCAN)
-            permissions.add(Manifest.permission.BLUETOOTH_CONNECT)
-        }
-
-        // Показываем пояснение перед первым запросом
-        if (shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)) {
-            Toast.makeText(
-                this,
-                "Для поиска Bluetooth-устройств требуется доступ к геолокации",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-
-        permissionLauncher.launch(permissions.toTypedArray())
-    }
-
-    private fun updateStatus() {
-        val sb = StringBuilder()
-
-        if (!btManager.isBluetoothSupported()) {
-            sb.append("❌ Bluetooth не поддерживается этим устройством\n")
-        } else {
-            sb.append("✅ Bluetooth поддерживается устройством\n")
-        }
-
-        if (!btManager.isBluetoothEnabled()) {
-            sb.append("❌ Bluetooth отключен. Включите в настройках устройства.\n")
-        } else {
-            sb.append("✅ Bluetooth включен и готов к работе\n")
-        }
-
-        if (!hasRequiredPermissions()) {
-            sb.append("⚠️ Требуются разрешения для поиска устройств\n")
-        } else {
-            sb.append("✅ Все необходимые разрешения предоставлены\n")
-        }
-
-        if (btManager.debugMode) {
-            sb.append("🔧 Режим отладки: ВКЛЮЧЕН\n")
-        }
-
-        tvStatus.text = sb.toString()
+        requestPermissionsIfNeeded()
     }
 
     override fun onResume() {
         super.onResume()
+        refreshLocks()
         updateStatus()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        btManager.destroy()
+        bt.destroy()
+        btStateReceiver?.let { try { unregisterReceiver(it) } catch (_: Exception) {} }
+    }
+
+    // ── Setup ─────────────────────────────────────────────────────────────────
+
+    private fun setupRecyclerView() {
+        adapter = LockAdapter(
+            onOpen = { lock -> openLock(lock) },
+            onLongClick = { lock -> showLockMenu(lock) }
+        )
+        rvLocks.layoutManager = LinearLayoutManager(this)
+        rvLocks.adapter = adapter
+    }
+
+    private fun setupButtons() {
+        findViewById<Button>(R.id.btnAddLock).setOnClickListener {
+            startActivity(Intent(this, SetupActivity::class.java))
+        }
+        findViewById<Button>(R.id.btnAddLockEmpty)?.setOnClickListener {
+            startActivity(Intent(this, SetupActivity::class.java))
+        }
+    }
+
+    private fun setupBtCallbacks() {
+        bt.onDeviceFound = { name, addr ->
+            runOnUiThread { setStatus("🎯 Найдено: $name\n$addr") }
+        }
+
+        bt.onConnected = {
+            runOnUiThread { setStatus("🔗 Подключено, отправка TOTP..."); showProgress(true) }
+            handler.postDelayed({
+                val lock = activeLock ?: return@postDelayed
+                if (!bt.sendTotpCommand(lock)) {
+                    runOnUiThread { setStatus("❌ Ошибка отправки команды"); showProgress(false) }
+                }
+            }, 500)
+        }
+
+        bt.onCommandSent = { cmd ->
+            runOnUiThread { setStatus("📤 Команда отправлена\n${cmd.take(8)}••••••••••"); showProgress(false) }
+        }
+
+        bt.onCommandResponse = { resp ->
+            runOnUiThread {
+                setStatus("📥 Ответ: $resp")
+                if (resp.contains("OK", ignoreCase = true) ||
+                    resp.contains("Получено", ignoreCase = true) ||
+                    resp.contains("СОВПАДЕНИЕ", ignoreCase = true)) {
+                    setStatus("✅ Замок открыт!")
+                    toast("Замок открыт!")
+                } else if (resp.contains("Ключ не найден") || resp.contains("ERROR")) {
+                    setStatus("❌ Ключ не подошёл\n$resp")
+                    toast("Ошибка: ключ не подошёл")
+                }
+            }
+            handler.postDelayed({ bt.disconnect() }, 2000)
+        }
+
+        bt.onDisconnected = {
+            runOnUiThread { showProgress(false) }
+        }
+
+        bt.onDiscoveryFinished = {
+            runOnUiThread {
+                if (bt.getDiscoveredDevices().isEmpty()) {
+                    setStatus("❌ Устройство не найдено\nПроверьте что HC-05 (BLE_LOCKER) включён")
+                    showProgress(false)
+                }
+            }
+        }
+
+        bt.onError = { msg ->
+            runOnUiThread { setStatus("❌ $msg"); showProgress(false); toast(msg) }
+        }
+    }
+
+    // ── Open lock ─────────────────────────────────────────────────────────────
+
+    private fun openLock(lock: LockEntry) {
+        if (!hasPermissions()) { requestPermissionsIfNeeded(); return }
+        if (!bt.isEnabled()) { toast("Включите Bluetooth"); return }
+
+        activeLock = lock
+        showProgress(true)
+        setStatus("🔍 Поиск ${bt.targetDeviceName}...")
+        bt.startDiscovery()
+    }
+
+    // ── Lock context menu ─────────────────────────────────────────────────────
+
+    private fun showLockMenu(lock: LockEntry) {
+        AlertDialog.Builder(this)
+            .setTitle(lock.name)
+            .setItems(arrayOf("Открыть", "Переименовать", "Удалить")) { _, i ->
+                when (i) {
+                    0 -> openLock(lock)
+                    1 -> showRenameDialog(lock)
+                    2 -> showDeleteConfirm(lock)
+                }
+            }.show()
+    }
+
+    private fun showRenameDialog(lock: LockEntry) {
+        val et = EditText(this).apply { setText(lock.name); setPadding(48,24,48,24) }
+        AlertDialog.Builder(this)
+            .setTitle("Переименовать")
+            .setView(et)
+            .setPositiveButton("Сохранить") { _, _ ->
+                val n = et.text.toString().trim()
+                if (n.isNotEmpty()) { prefs.rename(lock.uid, n); refreshLocks() }
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
+    }
+
+    private fun showDeleteConfirm(lock: LockEntry) {
+        AlertDialog.Builder(this)
+            .setTitle("Удалить замок?")
+            .setMessage("Удалить «${lock.name}»? Это действие нельзя отменить.")
+            .setPositiveButton("Удалить") { _, _ -> prefs.delete(lock.uid); refreshLocks() }
+            .setNegativeButton("Отмена", null)
+            .show()
+    }
+
+    // ── UI helpers ────────────────────────────────────────────────────────────
+
+    private fun refreshLocks() {
+        val locks = prefs.getAll()
+        adapter.submitList(locks)
+        rvLocks.visibility    = if (locks.isEmpty()) View.GONE else View.VISIBLE
+        layoutEmpty.visibility = if (locks.isEmpty()) View.VISIBLE else View.GONE
+    }
+
+    private fun setStatus(text: String) { tvStatus.text = text }
+
+    private fun showProgress(show: Boolean) { progressBar.visibility = if (show) View.VISIBLE else View.GONE }
+
+    private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+
+    private fun updateStatus() {
+        val sb = StringBuilder()
+        if (!bt.isSupported()) sb.append("❌ Bluetooth не поддерживается\n")
+        else sb.append("✅ Bluetooth поддерживается\n")
+        if (!bt.isEnabled()) sb.append("❌ Bluetooth отключён\n")
+        else sb.append("✅ Bluetooth включён\n")
+        if (!hasPermissions()) sb.append("⚠️ Нужны разрешения Bluetooth\n")
+        else sb.append("✅ Разрешения получены\n")
+        setStatus(sb.toString().trim())
+    }
+
+    // ── Permissions ───────────────────────────────────────────────────────────
+
+    private fun hasPermissions(): Boolean = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        hasPermission(Manifest.permission.BLUETOOTH_SCAN) &&
+                hasPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    } else {
+        hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+
+    private fun hasPermission(p: String) =
+        ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
+
+    private fun requestPermissionsIfNeeded() {
+        val needed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+        } else {
+            arrayOf(Manifest.permission.BLUETOOTH, Manifest.permission.BLUETOOTH_ADMIN,
+                Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        val missing = needed.filter { !hasPermission(it) }
+        if (missing.isNotEmpty()) permLauncher.launch(missing.toTypedArray())
+        else updateStatus()
+    }
+}
+
+// ── RecyclerView Adapter ───────────────────────────────────────────────────────
+
+class LockAdapter(
+    private val onOpen: (LockEntry) -> Unit,
+    private val onLongClick: (LockEntry) -> Unit
+) : RecyclerView.Adapter<LockAdapter.VH>() {
+
+    private val items = mutableListOf<LockEntry>()
+
+    fun submitList(list: List<LockEntry>) {
+        items.clear(); items.addAll(list); notifyDataSetChanged()
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH =
+        VH(LayoutInflater.from(parent.context).inflate(R.layout.item_lock, parent, false))
+
+    override fun onBindViewHolder(h: VH, pos: Int) = h.bind(items[pos])
+    override fun getItemCount() = items.size
+
+    inner class VH(v: View) : RecyclerView.ViewHolder(v) {
+        private val tvName: TextView = v.findViewById(R.id.tvLockName)
+        private val tvUid:  TextView = v.findViewById(R.id.tvLockUid)
+        private val btnOpen: Button  = v.findViewById(R.id.btnOpenThis)
+
+        fun bind(lock: LockEntry) {
+            tvName.text = lock.name
+            tvUid.text  = "UID: ${lock.uidStr}"
+            btnOpen.setOnClickListener { onOpen(lock) }
+            itemView.setOnLongClickListener { onLongClick(lock); true }
+        }
     }
 }
